@@ -1,0 +1,29 @@
+{
+  "poolId": "0xadaf30776f551bccdfb307c3fd8cdec198ca9a852434c8022ee32d1ccedd8219",
+  "poolKey": {
+    "currency0": "0x0000000000000000000000000000000000000000",
+    "currency1": "0x0000000000000000000000000000000000000000",
+    "fee": 500,
+    "tickSpacing": 10,
+    "hooks": "0x0000000000000000000000000000000000000000"
+  },
+  "positionTokenId": null,
+  "position": {
+    "tickLower": -316386,
+    "tickUpper": -308563,
+    "priceRangeLower": 0.018206128,
+    "priceRangeUpper": 0.039806058,
+    "autoDetect": true
+  },
+  "monitoring": {
+    "checkIntervalMinutes": 5,
+    "alertOnOutOfRange": true,
+    "feeThresholdUSD": 5.0
+  },
+  "monadContracts": {
+    "poolManager": "0x188d586ddcf52439676ca21a244753fa19f9ea8e",
+    "positionManager": "0x5b7ec4a94ff9bedb700fb82ab09d5846972f4016",
+    "stateView": "0x77395f3b2e73ae90843717371294fa97cc419d64",
+    "quoter": "0xa222dd357a9076d1091ed6aa2e16c9742dd26891"
+  }
+}
