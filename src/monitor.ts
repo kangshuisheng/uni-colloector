@@ -55,6 +55,7 @@ async function checkSinglePosition(
       if (!status.isInRange) {
         console.log(`⚠️ [${config.name}] moved OUT of range!`);
         await sendOutOfRangeAlert(
+          config.name,
           status.currentPrice,
           status.priceLower,
           status.priceUpper,
@@ -62,11 +63,12 @@ async function checkSinglePosition(
         );
       } else {
         console.log(`✅ [${config.name}] moved BACK into range!`);
-        await sendBackInRangeAlert(status.currentPrice);
+        await sendBackInRangeAlert(config.name, status.currentPrice);
       }
     } else if (lastStatus === null && !status.isInRange) {
       console.log(`⚠️ [${config.name}] Initial check: OUT of range!`);
       await sendOutOfRangeAlert(
+        config.name,
         status.currentPrice,
         status.priceLower,
         status.priceUpper,
@@ -127,7 +129,7 @@ export async function startMonitor(): Promise<void> {
   console.log(`Check Interval: ${checkInterval} minutes`);
 
   // Send start alert (using first position's ID as reference or generic)
-  await sendMonitorStartAlert(POSITIONS[0].id, checkInterval);
+  await sendMonitorStartAlert(POSITIONS.length, checkInterval);
 
   // Immediate check
   await performCheck();

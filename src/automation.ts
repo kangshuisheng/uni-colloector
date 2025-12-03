@@ -2,6 +2,7 @@ import { publicClient, walletClient, CONTRACTS, account } from "./config";
 import { POSITION_MANAGER_ABI, STATE_VIEW_ABI } from "./abis";
 import { V3_NFT_MANAGER_ABI } from "./abis-v3";
 import { formatUnits, pad, toHex } from "viem";
+import { sendAutoActionAlert } from "./telegram";
 import type {
   PositionConfig,
   V4PositionConfig,
@@ -145,18 +146,23 @@ async function getUnclaimedFeesV3(config: V3PositionConfig): Promise<Fees> {
 /**
  * Claim fees for a position
  */
-export async function claimFees(config: PositionConfig) {
+export async function claimFees(config: PositionConfig, silent: boolean = false) {
   if (config.protocol === "v4") {
-    return claimFeesV4(config as V4PositionConfig);
+    return claimFeesV4(config as V4PositionConfig, silent);
   } else {
-    return claimFeesV3(config as V3PositionConfig);
+    return claimFeesV3(config as V3PositionConfig, silent);
   }
 }
 
-async function claimFeesV4(config: V4PositionConfig) {
+async function claimFeesV4(config: V4PositionConfig, silent: boolean) {
   if (!config.positionTokenId) return;
   const tokenId = config.positionTokenId;
   console.log(`Claiming fees for V4 position ${tokenId}...`);
+
+  let fees: Fees | null = null;
+  if (!silent) {
+      fees = await getUnclaimedFeesV4(config);
+  }
 
   const hash = await walletClient.writeContract({
     address: CONTRACTS.positionManager,
@@ -176,13 +182,31 @@ async function claimFeesV4(config: V4PositionConfig) {
   console.log(`Transaction sent: ${hash}`);
   await publicClient.waitForTransactionReceipt({ hash });
   console.log("Fees claimed successfully!");
+
+  if (!silent && fees) {
+      await sendAutoActionAlert(
+          "领取",
+          config.name,
+          fees.amount0Formatted,
+          "T0",
+          fees.amount1Formatted,
+          "T1",
+          hash
+      );
+  }
+  
   return hash;
 }
 
-async function claimFeesV3(config: V3PositionConfig) {
+async function claimFeesV3(config: V3PositionConfig, silent: boolean) {
   if (!config.nftId) return;
   const tokenId = config.nftId;
   console.log(`Claiming fees for V3 position ${tokenId}...`);
+
+  let fees: Fees | null = null;
+  if (!silent) {
+      fees = await getUnclaimedFeesV3(config);
+  }
 
   const hash = await walletClient.writeContract({
     address: config.nonfungiblePositionManagerAddress,
@@ -202,6 +226,19 @@ async function claimFeesV3(config: V3PositionConfig) {
   console.log(`Transaction sent: ${hash}`);
   await publicClient.waitForTransactionReceipt({ hash });
   console.log("Fees claimed successfully!");
+
+  if (!silent && fees) {
+      await sendAutoActionAlert(
+          "领取",
+          config.name,
+          fees.amount0Formatted,
+          "T0",
+          fees.amount1Formatted,
+          "T1",
+          hash
+      );
+  }
+
   return hash;
 }
 
@@ -221,22 +258,24 @@ export async function compoundFees(config: PositionConfig) {
     return;
   }
 
-  // 2. Claim fees
-  await claimFees(config);
+  // 2. Claim fees (silent, because we will alert for compound)
+  await claimFees(config, true);
 
   // 3. Add Liquidity
   console.log(
     `Adding liquidity: ${fees.amount0Formatted} T0, ${fees.amount1Formatted} T1`
   );
 
+  let txHash: string | undefined;
+
   if (config.protocol === "v4") {
-    await increaseLiquidityV4(
+    txHash = await increaseLiquidityV4(
       config as V4PositionConfig,
       amount0ToAdd,
       amount1ToAdd
     );
   } else {
-    await increaseLiquidityV3(
+    txHash = await increaseLiquidityV3(
       config as V3PositionConfig,
       amount0ToAdd,
       amount1ToAdd
@@ -244,6 +283,16 @@ export async function compoundFees(config: PositionConfig) {
   }
 
   console.log("Compounding complete!");
+
+  await sendAutoActionAlert(
+    "复利",
+    config.name,
+    fees.amount0Formatted,
+    "T0",
+    fees.amount1Formatted,
+    "T1",
+    txHash
+  );
 }
 
 async function increaseLiquidityV4(
@@ -272,6 +321,7 @@ async function increaseLiquidityV4(
 
   console.log(`Increase Liquidity Tx: ${hash}`);
   await publicClient.waitForTransactionReceipt({ hash });
+  return hash;
 }
 
 async function increaseLiquidityV3(
@@ -300,6 +350,7 @@ async function increaseLiquidityV3(
 
   console.log(`Increase Liquidity Tx: ${hash}`);
   await publicClient.waitForTransactionReceipt({ hash });
+  return hash;
 }
 
 /**

@@ -54,23 +54,24 @@ export async function sendTelegramMessage(
  * 发送出圈警报
  */
 export async function sendOutOfRangeAlert(
+  positionName: string,
   currentPrice: number,
   priceLower: number,
   priceUpper: number,
   deviation: number
 ): Promise<void> {
   const message = `
-🚨 *ALERT: LP Position Out of Range!*
+🚨 *警报: LP 仓位超出区间!*
 
-📍 Pool: MON/AUSD (v4)
-💰 Current Price: \`${currentPrice.toFixed(8)}\` MON/AUSD
-📊 Your Range: \`${priceLower.toFixed(8)}\` - \`${priceUpper.toFixed(8)}\`
-⚠️ Deviation: \`${deviation.toFixed(2)}%\`
+📍 仓位: \`${positionName}\`
+💰 当前价格: \`${currentPrice.toFixed(8)}\`
+📊 设定区间: \`${priceLower.toFixed(8)}\` - \`${priceUpper.toFixed(8)}\`
+⚠️ 偏离程度: \`${deviation.toFixed(2)}%\`
 
-⏰ Time: ${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}
+⏰ 时间: ${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}
 
-💡 *Recommendation:*
-Your position is no longer earning fees. Consider rebalancing your liquidity range.
+💡 *建议:*
+您的仓位目前不再赚取手续费。请考虑重新平衡您的流动性区间。
   `.trim();
 
   await sendTelegramMessage(message);
@@ -80,17 +81,18 @@ Your position is no longer earning fees. Consider rebalancing your liquidity ran
  * 发送重新进入区间的通知
  */
 export async function sendBackInRangeAlert(
+  positionName: string,
   currentPrice: number
 ): Promise<void> {
   const message = `
-✅ *LP Position Back In Range*
+✅ *LP 仓位回到区间*
 
-📍 Pool: MON/AUSD (v4)
-💰 Current Price: \`${currentPrice.toFixed(8)}\` MON/AUSD
+📍 仓位: \`${positionName}\`
+💰 当前价格: \`${currentPrice.toFixed(8)}\`
 
-⏰ Time: ${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}
+⏰ 时间: ${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}
 
-🎉 Your position is now earning fees again!
+🎉 您的仓位现在恢复赚取手续费了！
   `.trim();
 
   await sendTelegramMessage(message);
@@ -100,22 +102,60 @@ export async function sendBackInRangeAlert(
  * 发送监控启动通知
  */
 export async function sendMonitorStartAlert(
-  poolId: string,
+  positionCount: number,
   checkInterval: number
 ): Promise<void> {
   const message = `
-🤖 *LP Monitor Started*
+🤖 *LP 监控已启动*
 
-📍 Pool ID: \`${poolId}\`
-⏱️ Check Interval: ${checkInterval} minutes
+📊 监控仓位数量: \`${positionCount}\`
+⏱️ 检查间隔: ${checkInterval} 分钟
 
-✅ Monitoring active. You'll receive alerts when:
-• Position goes out of range
-• Position returns to range
-• Fees reach threshold (future feature)
+✅ 监控激活中。当发生以下情况时您将收到通知：
+• 仓位超出区间
+• 仓位回到区间
+• 自动复利/领取执行
 
-⏰ Started: ${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}
+⏰ 启动时间: ${new Date().toLocaleString("zh-CN", {
+    timeZone: "Asia/Shanghai",
+  })}
   `.trim();
+
+  await sendTelegramMessage(message);
+}
+
+/**
+ * 发送自动操作通知 (复利/领取)
+ */
+export async function sendAutoActionAlert(
+  action: "复利" | "领取",
+  positionName: string,
+  amount0: string,
+  symbol0: string, // e.g. "MON"
+  amount1: string,
+  symbol1: string, // e.g. "AUSD"
+  txHash?: string
+): Promise<void> {
+  const emoji = action === "复利" ? "🔄" : "💰";
+
+  let message = `
+${emoji} *自动${action}执行成功*
+
+📍 仓位: \`${positionName}\`
+💵 ${action}金额:
+• ${amount0} ${symbol0}
+• ${amount1} ${symbol1}
+
+⏰ 时间: ${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}
+`.trim();
+
+  if (txHash) {
+    // 简单的截断显示
+    const shortHash = `${txHash.substring(0, 6)}...${txHash.substring(
+      txHash.length - 4
+    )}`;
+    message += `\n🔗 交易哈希: \`${shortHash}\``;
+  }
 
   await sendTelegramMessage(message);
 }
@@ -125,13 +165,13 @@ export async function sendMonitorStartAlert(
  */
 export async function sendErrorAlert(error: string): Promise<void> {
   const message = `
-❌ *Monitor Error*
+❌ *监控错误*
 
-Error: \`${error}\`
+错误信息: \`${error}\`
 
-⏰ Time: ${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}
+⏰ 时间: ${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}
 
-Please check the logs for more details.
+请检查日志以获取更多详细信息。
   `.trim();
 
   await sendTelegramMessage(message);
