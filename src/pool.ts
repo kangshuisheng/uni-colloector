@@ -8,7 +8,7 @@ import type {
   PositionStatus,
 } from "./types";
 import { getUnclaimedFees } from "./automation";
-import { Token, CurrencyAmount } from "@uniswap/sdk-core";
+import { Token } from "@uniswap/sdk-core";
 import { Pool as PoolV4, Position as PositionV4 } from "@uniswap/v4-sdk";
 import { Pool as PoolV3, Position as PositionV3 } from "@uniswap/v3-sdk";
 import JSBI from "jsbi";
@@ -49,19 +49,56 @@ async function checkV4Position(
     const [sqrtPriceX96, tick, protocolFee, lpFee] = slot0;
     const currentTick = Number(tick);
 
-    // Get Liquidity
+    // Get Liquidity and Pool Info
     let liquidity = 0n;
+    let poolTickSpacing = 60;
+    let poolFee = 3000;
+    let activeTickLower = config.tickLower;
+    let activeTickUpper = config.tickUpper;
+
     if (config.positionTokenId) {
-      const pos = await publicClient.readContract({
+      liquidity = await publicClient.readContract({
         address: CONTRACTS.positionManager,
         abi: POSITION_MANAGER_ABI,
-        functionName: "positions",
+        functionName: "getPositionLiquidity",
         args: [config.positionTokenId],
       });
-      liquidity = pos[3];
+
+      // Fetch Pool Key and Position Info
+      const [poolKey, info] = await publicClient.readContract({
+        address: CONTRACTS.positionManager,
+        abi: POSITION_MANAGER_ABI,
+        functionName: "getPoolAndPositionInfo",
+        args: [config.positionTokenId],
+      });
+
+      poolTickSpacing = poolKey.tickSpacing;
+      poolFee = poolKey.fee;
+
+      // Parse Position Info for ticks
+      // Layout: 200 bits poolId | 24 bits tickUpper | 24 bits tickLower | 8 bits hasSubscriber
+      const infoBI = BigInt(info);
+      let tl = Number((infoBI >> 8n) & 0xffffffn);
+      let tu = Number((infoBI >> 32n) & 0xffffffn);
+
+      // Sign extension for 24-bit integers
+      if (tl & 0x800000) tl -= 0x1000000;
+      if (tu & 0x800000) tu -= 0x1000000;
+
+      activeTickLower = tl;
+      activeTickUpper = tu;
     }
 
-    return calculateStatusV4(config, currentTick, sqrtPriceX96, liquidity);
+    return calculateStatusV4(
+      config,
+      currentTick,
+      sqrtPriceX96,
+      liquidity,
+      poolTickSpacing,
+      poolFee,
+      activeTickLower,
+      activeTickUpper
+    );
   } catch (error) {
     console.error(`Error checking V4 position ${config.name}:`, error);
     throw error;
@@ -97,7 +134,7 @@ async function checkV3Position(
         args: [config.nftId],
       });
       liquidity = pos[7]; // liquidity is at index 7 in V3 ABI
-      fee = pos[4];       // fee is at index 4
+      fee = pos[4]; // fee is at index 4
     }
 
     return calculateStatusV3(config, currentTick, sqrtPriceX96, liquidity, fee);
@@ -111,22 +148,37 @@ async function calculateStatusV4(
   config: V4PositionConfig,
   currentTick: number,
   sqrtPriceX96: bigint,
-  liquidity: bigint
+  liquidity: bigint,
+  tickSpacing: number,
+  fee: number,
+  tickLower: number,
+  tickUpper: number
 ): Promise<PositionStatus> {
-  const { tickLower, tickUpper } = config;
   const chainId = 143; // Monad Testnet
 
   // Create Tokens
-  const token0 = new Token(chainId, "0x0000000000000000000000000000000000000000", config.token0Decimals, "T0", "Token0");
-  const token1 = new Token(chainId, "0x0000000000000000000000000000000000000001", config.token1Decimals, "T1", "Token1");
+  const token0 = new Token(
+    chainId,
+    "0x0000000000000000000000000000000000000000",
+    config.token0Decimals,
+    "T0",
+    "Token0"
+  );
+  const token1 = new Token(
+    chainId,
+    "0x0000000000000000000000000000000000000001",
+    config.token1Decimals,
+    "T1",
+    "Token1"
+  );
 
   // Create Pool
   // V4 Pool Constructor: currencyA, currencyB, fee, tickSpacing, hooks, sqrtRatioX96, liquidity, tickCurrent
   const pool = new PoolV4(
     token0,
     token1,
-    3000, // Dummy fee
-    60,   // Dummy tickSpacing
+    fee,
+    tickSpacing,
     "0x0000000000000000000000000000000000000000", // Dummy hooks
     toJSBI(sqrtPriceX96),
     toJSBI(0n), // Pool liquidity (global) - not needed for position amount calc usually, but required by constructor
@@ -140,19 +192,28 @@ async function calculateStatusV4(
   // Calculate Amounts
   let amount0 = 0;
   let amount1 = 0;
-  
+
   if (liquidity > 0n) {
     const position = new PositionV4({
       pool,
       liquidity: toJSBI(liquidity),
       tickLower,
-      tickUpper
+      tickUpper,
     });
     amount0 = parseFloat(position.amount0.toExact());
     amount1 = parseFloat(position.amount1.toExact());
   }
 
-  return buildStatus(config, currentTick, currentPrice, amount0, amount1, liquidity);
+  return buildStatus(
+    config,
+    currentTick,
+    currentPrice,
+    amount0,
+    amount1,
+    liquidity,
+    tickLower,
+    tickUpper
+  );
 }
 
 async function calculateStatusV3(
@@ -166,15 +227,27 @@ async function calculateStatusV3(
   const chainId = 1; // Dummy chainId
 
   // Create Tokens
-  const token0 = new Token(chainId, "0x0000000000000000000000000000000000000000", config.token0Decimals, "T0", "Token0");
-  const token1 = new Token(chainId, "0x0000000000000000000000000000000000000001", config.token1Decimals, "T1", "Token1");
+  const token0 = new Token(
+    chainId,
+    "0x0000000000000000000000000000000000000000",
+    config.token0Decimals,
+    "T0",
+    "Token0"
+  );
+  const token1 = new Token(
+    chainId,
+    "0x0000000000000000000000000000000000000001",
+    config.token1Decimals,
+    "T1",
+    "Token1"
+  );
 
   // Create Pool
   // V3 Pool Constructor: tokenA, tokenB, fee, sqrtRatioX96, liquidity, tickCurrent
   const pool = new PoolV3(
     token0,
     token1,
-    fee, 
+    fee,
     toJSBI(sqrtPriceX96),
     toJSBI(0n), // Pool liquidity
     currentTick
@@ -193,15 +266,23 @@ async function calculateStatusV3(
       pool,
       liquidity: toJSBI(liquidity),
       tickLower,
-      tickUpper
+      tickUpper,
     });
     amount0 = parseFloat(position.amount0.toExact());
     amount1 = parseFloat(position.amount1.toExact());
   }
 
-  return buildStatus(config, currentTick, currentPrice, amount0, amount1, liquidity);
+  return buildStatus(
+    config,
+    currentTick,
+    currentPrice,
+    amount0,
+    amount1,
+    liquidity,
+    tickLower,
+    tickUpper
+  );
 }
-
 
 async function buildStatus(
   config: PositionConfig,
@@ -209,14 +290,18 @@ async function buildStatus(
   currentPrice: number,
   amount0: number,
   amount1: number,
-  liquidity: bigint
+  liquidity: bigint,
+  tickLower: number,
+  tickUpper: number
 ): Promise<PositionStatus> {
-  const { tickLower, tickUpper } = config;
-
   // Calculate Price Range
   // We can use SDK to get price at ticks, but simple math is fine for display
-  const priceLower = Math.pow(1.0001, tickLower) * Math.pow(10, config.token0Decimals - config.token1Decimals);
-  const priceUpper = Math.pow(1.0001, tickUpper) * Math.pow(10, config.token0Decimals - config.token1Decimals);
+  const priceLower =
+    Math.pow(1.0001, tickLower) *
+    Math.pow(10, config.token0Decimals - config.token1Decimals);
+  const priceUpper =
+    Math.pow(1.0001, tickUpper) *
+    Math.pow(10, config.token0Decimals - config.token1Decimals);
 
   const inRange = isInRange(currentTick, tickLower, tickUpper);
 
@@ -241,19 +326,17 @@ async function buildStatus(
     // Estimate Value
     const token1Price = config.analytics?.token1PriceUSD || 1.0;
     const token0Price = currentPrice * token1Price;
-    
-    currentValueUSD = (amount0 * token0Price) + (amount1 * token1Price);
 
-    // Get Pending Fees (V4 only for now)
-    if (config.protocol === 'v4' && (config as V4PositionConfig).positionTokenId) {
-      try {
-        const fees = await getUnclaimedFees((config as V4PositionConfig).positionTokenId!, config.token0Decimals, config.token1Decimals);
-        const fee0 = Number(fees.amount0Formatted);
-        const fee1 = Number(fees.amount1Formatted);
-        feesPendingUSD = (fee0 * token0Price) + (fee1 * token1Price);
-      } catch (e) {
-        // Ignore fee fetch errors
-      }
+    currentValueUSD = amount0 * token0Price + amount1 * token1Price;
+
+    // Get Pending Fees
+    try {
+      const fees = await getUnclaimedFees(config);
+      const fee0 = Number(fees.amount0Formatted);
+      const fee1 = Number(fees.amount1Formatted);
+      feesPendingUSD = fee0 * token0Price + fee1 * token1Price;
+    } catch (e) {
+      // Ignore fee fetch errors
     }
 
     // Calculate ROI / APR
@@ -267,7 +350,7 @@ async function buildStatus(
       roi = ((totalValue - initialValue) / initialValue) * 100;
 
       if (daysElapsed > 0) {
-        apr = ((feesPendingUSD / initialValue) / daysElapsed) * 365 * 100;
+        apr = (feesPendingUSD / initialValue / daysElapsed) * 365 * 100;
         const dailyFee = feesPendingUSD / daysElapsed;
         if (dailyFee > 0) {
           daysToBreakeven = initialValue / dailyFee;
@@ -292,10 +375,9 @@ async function buildStatus(
     feesPendingUSD,
     apr,
     roi,
-    daysToBreakeven
+    daysToBreakeven,
   };
 }
-
 
 /**
  * Format status for display/telegram
@@ -314,13 +396,15 @@ export function formatPositionStatus(status: PositionStatus): string {
     feesPendingUSD,
     apr,
     roi,
-    daysToBreakeven
+    daysToBreakeven,
   } = status;
 
   let message = `📊 *${config.name} Status*\n`;
   message += `Protocol: ${config.protocol.toUpperCase()}\n\n`;
   message += `Current Price: \`${currentPrice.toFixed(8)}\`\n`;
-  message += `Range: \`${priceLower.toFixed(8)}\` - \`${priceUpper.toFixed(8)}\`\n`;
+  message += `Range: \`${priceLower.toFixed(8)}\` - \`${priceUpper.toFixed(
+    8
+  )}\`\n`;
   message += `Status: ${isInRange ? "✅ IN RANGE" : "⚠️ OUT OF RANGE"}\n`;
 
   if (!isInRange) {

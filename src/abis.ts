@@ -42,121 +42,74 @@ export const STATE_VIEW_ABI = [
     inputs: [{ name: "poolId", type: "bytes32" }],
     outputs: [{ name: "liquidity", type: "uint128" }],
   },
+  {
+    name: "getPositionInfo",
+    type: "function",
+    stateMutability: "view",
+    inputs: [
+      { name: "poolId", type: "bytes32" },
+      { name: "owner", type: "address" },
+      { name: "tickLower", type: "int24" },
+      { name: "tickUpper", type: "int24" },
+      { name: "salt", type: "bytes32" }
+    ],
+    outputs: [
+      { name: "liquidity", type: "uint128" },
+      { name: "feeGrowthInside0LastX128", type: "uint256" },
+      { name: "feeGrowthInside1LastX128", type: "uint256" }
+    ]
+  },
+  {
+    name: "getFeeGrowthInside",
+    type: "function",
+    stateMutability: "view",
+    inputs: [
+      { name: "poolId", type: "bytes32" },
+      { name: "tickLower", type: "int24" },
+      { name: "tickUpper", type: "int24" }
+    ],
+    outputs: [
+      { name: "feeGrowthInside0X128", type: "uint256" },
+      { name: "feeGrowthInside1X128", type: "uint256" }
+    ]
+  },
 ] as const;
 
 // Extended ABI for PositionManager
 export const POSITION_MANAGER_ABI = [
   {
-    name: "positions",
+    name: "getPositionLiquidity",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ name: "liquidity", type: "uint128" }],
+  },
+  {
+    name: "getPoolAndPositionInfo",
     type: "function",
     stateMutability: "view",
     inputs: [{ name: "tokenId", type: "uint256" }],
     outputs: [
-      { name: "poolId", type: "bytes32" },
-      { name: "tickLower", type: "int24" },
-      { name: "tickUpper", type: "int24" },
-      { name: "liquidity", type: "uint128" },
-      { name: "feeGrowthInside0LastX128", type: "uint256" },
-      { name: "feeGrowthInside1LastX128", type: "uint256" },
-      { name: "tokensOwed0", type: "uint128" },
-      { name: "tokensOwed1", type: "uint128" }
+      {
+        name: "poolKey",
+        type: "tuple",
+        components: [
+          { name: "currency0", type: "address" },
+          { name: "currency1", type: "address" },
+          { name: "fee", type: "uint24" },
+          { name: "tickSpacing", type: "int24" },
+          { name: "hooks", type: "address" },
+        ],
+      },
+      { name: "info", type: "uint256" },
     ],
   },
   {
-    name: "mint",
+    name: "ownerOf",
     type: "function",
-    stateMutability: "payable",
-    inputs: [
-      {
-        name: "params",
-        type: "tuple",
-        components: [
-          { name: "poolId", type: "bytes32" },
-          { name: "tickLower", type: "int24" },
-          { name: "tickUpper", type: "int24" },
-          { name: "amount0Desired", type: "uint256" },
-          { name: "amount1Desired", type: "uint256" },
-          { name: "amount0Min", type: "uint256" },
-          { name: "amount1Min", type: "uint256" },
-          { name: "recipient", type: "address" },
-          { name: "deadline", type: "uint256" },
-          { name: "salt", type: "bytes32" }
-        ]
-      }
-    ],
-    outputs: [
-      { name: "tokenId", type: "uint256" },
-      { name: "liquidity", type: "uint128" },
-      { name: "amount0", type: "uint256" },
-      { name: "amount1", type: "uint256" }
-    ]
-  },
-  {
-    name: "increaseLiquidity",
-    type: "function",
-    stateMutability: "payable",
-    inputs: [
-      {
-        name: "params",
-        type: "tuple",
-        components: [
-          { name: "tokenId", type: "uint256" },
-          { name: "amount0Desired", type: "uint256" },
-          { name: "amount1Desired", type: "uint256" },
-          { name: "amount0Min", type: "uint256" },
-          { name: "amount1Min", type: "uint256" },
-          { name: "deadline", type: "uint256" }
-        ]
-      }
-    ],
-    outputs: [
-      { name: "liquidity", type: "uint128" },
-      { name: "amount0", type: "uint256" },
-      { name: "amount1", type: "uint256" }
-    ]
-  },
-  {
-    name: "decreaseLiquidity",
-    type: "function",
-    stateMutability: "payable",
-    inputs: [
-      {
-        name: "params",
-        type: "tuple",
-        components: [
-          { name: "tokenId", type: "uint256" },
-          { name: "liquidity", type: "uint128" },
-          { name: "amount0Min", type: "uint256" },
-          { name: "amount1Min", type: "uint256" },
-          { name: "deadline", type: "uint256" }
-        ]
-      }
-    ],
-    outputs: [
-      { name: "amount0", type: "uint256" },
-      { name: "amount1", type: "uint256" }
-    ]
-  },
-  {
-    name: "collect",
-    type: "function",
-    stateMutability: "payable",
-    inputs: [
-      {
-        name: "params",
-        type: "tuple",
-        components: [
-          { name: "tokenId", type: "uint256" },
-          { name: "recipient", type: "address" },
-          { name: "amount0Max", type: "uint128" },
-          { name: "amount1Max", type: "uint128" }
-        ]
-      }
-    ],
-    outputs: [
-      { name: "amount0", type: "uint256" },
-      { name: "amount1", type: "uint256" }
-    ]
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ name: "owner", type: "address" }],
   },
   {
     name: "balanceOf",
@@ -171,10 +124,77 @@ export const POSITION_MANAGER_ABI = [
     stateMutability: "view",
     inputs: [
       { name: "owner", type: "address" },
-      { name: "index", type: "uint256" }
+      { name: "index", type: "uint256" },
     ],
     outputs: [{ name: "", type: "uint256" }],
-  }
+  },
+  {
+    name: "collect",
+    type: "function",
+    stateMutability: "payable",
+    inputs: [
+      {
+        name: "params",
+        type: "tuple",
+        components: [
+          { name: "tokenId", type: "uint256" },
+          { name: "recipient", type: "address" },
+          { name: "amount0Max", type: "uint128" },
+          { name: "amount1Max", type: "uint128" },
+        ],
+      },
+    ],
+    outputs: [
+      { name: "amount0", type: "uint256" },
+      { name: "amount1", type: "uint256" },
+    ],
+  },
+  {
+    name: "decreaseLiquidity",
+    type: "function",
+    stateMutability: "payable",
+    inputs: [
+      {
+        name: "params",
+        type: "tuple",
+        components: [
+          { name: "tokenId", type: "uint256" },
+          { name: "liquidity", type: "uint128" },
+          { name: "amount0Min", type: "uint128" },
+          { name: "amount1Min", type: "uint128" },
+          { name: "deadline", type: "uint256" },
+        ],
+      },
+    ],
+    outputs: [
+      { name: "amount0", type: "uint256" },
+      { name: "amount1", type: "uint256" },
+    ],
+  },
+  {
+    name: "increaseLiquidity",
+    type: "function",
+    stateMutability: "payable",
+    inputs: [
+      {
+        name: "params",
+        type: "tuple",
+        components: [
+          { name: "tokenId", type: "uint256" },
+          { name: "amount0Desired", type: "uint128" },
+          { name: "amount1Desired", type: "uint128" },
+          { name: "amount0Min", type: "uint128" },
+          { name: "amount1Min", type: "uint128" },
+          { name: "deadline", type: "uint256" },
+        ],
+      },
+    ],
+    outputs: [
+      { name: "liquidity", type: "uint128" },
+      { name: "amount0", type: "uint256" },
+      { name: "amount1", type: "uint256" },
+    ],
+  },
 ] as const;
 
 // Minimal ABI for ERC20 tokens

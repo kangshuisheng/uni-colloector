@@ -71,6 +71,52 @@ export const V3_NFT_MANAGER_ABI = [
     ],
     stateMutability: "payable",
     type: "function"
+  },
+  {
+    inputs: [
+      {
+        components: [
+          { name: "tokenId", type: "uint256" },
+          { name: "liquidity", type: "uint128" },
+          { name: "amount0Min", type: "uint256" },
+          { name: "amount1Min", type: "uint256" },
+          { name: "deadline", type: "uint256" }
+        ],
+        name: "params",
+        type: "tuple"
+      }
+    ],
+    name: "decreaseLiquidity",
+    outputs: [
+      { name: "amount0", type: "uint256" },
+      { name: "amount1", type: "uint256" }
+    ],
+    stateMutability: "payable",
+    type: "function"
+  },
+  {
+    inputs: [
+      {
+        components: [
+          { name: "tokenId", type: "uint256" },
+          { name: "amount0Desired", type: "uint256" },
+          { name: "amount1Desired", type: "uint256" },
+          { name: "amount0Min", type: "uint256" },
+          { name: "amount1Min", type: "uint256" },
+          { name: "deadline", type: "uint256" }
+        ],
+        name: "params",
+        type: "tuple"
+      }
+    ],
+    name: "increaseLiquidity",
+    outputs: [
+      { name: "liquidity", type: "uint128" },
+      { name: "amount0", type: "uint256" },
+      { name: "amount1", type: "uint256" }
+    ],
+    stateMutability: "payable",
+    type: "function"
   }
 ] as const;
 

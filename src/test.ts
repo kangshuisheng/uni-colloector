@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
-import { checkPosition, formatPositionStatus } from './pool';
-import { sendTelegramMessage } from './telegram';
+import { checkPosition } from './pool';
 import { POSITIONS } from './config';
+import { printDashboard } from './ui';
 
 console.log('🧪 Testing LP Position Monitor\n');
 
@@ -10,21 +10,23 @@ if (POSITIONS.length === 0) {
   process.exit(1);
 }
 
-try {
-  for (const position of POSITIONS) {
-    console.log(`\n1️⃣ Testing pool state query for ${position.name}...`);
-    const status = await checkPosition(position);
+async function run() {
+  try {
+    const statuses = [];
+    console.log('Fetching data...');
     
-    console.log('\n📊 Position Status:');
-    console.log(formatPositionStatus(status));
+    for (const position of POSITIONS) {
+      const status = await checkPosition(position);
+      statuses.push(status);
+    }
     
-    console.log('\n2️⃣ Testing Telegram notification...');
-    const message = formatPositionStatus(status);
-    await sendTelegramMessage(message);
+    printDashboard(statuses);
+    
+    console.log('\n✅ All tests completed!');
+  } catch (error) {
+    console.error('\n❌ Test failed:', error);
+    process.exit(1);
   }
-  
-  console.log('\n✅ All tests completed!');
-} catch (error) {
-  console.error('\n❌ Test failed:', error);
-  process.exit(1);
 }
+
+run();

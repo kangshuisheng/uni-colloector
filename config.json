@@ -19,21 +19,16 @@
       "token0Decimals": 18,
       "token1Decimals": 6,
       "poolId": "0xadaf30776f551bccdfb307c3fd8cdec198ca9a852434c8022ee32d1ccedd8219",
-      "positionTokenId": null,
+      "positionTokenId": "17566",
       "tickLower": -316386,
       "tickUpper": -308563,
       "automation": {
         "enabled": true,
         "autoClaim": true,
-        "autoCompound": false,
-        "autoRebalance": false,
+        "autoCompound": true,
+        "autoRebalance": true,
         "minFeeToClaimUSD": 5.0,
         "rebalanceThresholdPercent": 10.0
-      },
-      "analytics": {
-        "initialValueUSD": 216.07,
-        "startTime": "2025-12-01T00:00:00Z",
-        "token1PriceUSD": 1.0
       }
     },
     {
@@ -49,10 +44,10 @@
       "tickLower": -315200,
       "tickUpper": -309000,
       "automation": {
-        "enabled": false,
-        "autoClaim": false,
-        "autoCompound": false,
-        "autoRebalance": false,
+        "enabled": true,
+        "autoClaim": true,
+        "autoCompound": true,
+        "autoRebalance": true,
         "minFeeToClaimUSD": 5.0,
         "rebalanceThresholdPercent": 10.0
       }

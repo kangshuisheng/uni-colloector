@@ -5,8 +5,9 @@ import {
   sendBackInRangeAlert,
 } from "./telegram";
 import { POSITIONS, MONITORING_CONFIG } from "./config";
-import { getUnclaimedFees, claimFees } from "./automation";
-import type { PositionConfig, V4PositionConfig } from "./types";
+import { getUnclaimedFees, claimFees, compoundFees } from "./automation";
+import type { PositionConfig, V4PositionConfig, PositionStatus } from "./types";
+import { printDashboard } from "./ui";
 
 // State tracking per position
 const positionStates = new Map<string, boolean | null>();
@@ -15,30 +16,33 @@ let isRunning = false;
 /**
  * Check a single position
  */
-async function checkSinglePosition(config: PositionConfig): Promise<void> {
+async function checkSinglePosition(
+  config: PositionConfig
+): Promise<PositionStatus | null> {
   try {
     const status = await checkPosition(config);
-    console.log(formatPositionStatus(status));
+    // console.log(formatPositionStatus(status));
 
-    // --- Automation Logic (V4 Only for now) ---
-    if (config.protocol === "v4" && config.automation.enabled) {
-      const v4Config = config as V4PositionConfig;
-      if (v4Config.positionTokenId) {
-        // Auto Claim
-        if (config.automation.autoClaim) {
-          try {
-            const fees = await getUnclaimedFees(
-              v4Config.positionTokenId,
-              config.token0Decimals,
-              config.token1Decimals
-            );
-            if (fees.amount0 > 0n || fees.amount1 > 0n) {
-              console.log(`[${config.name}] Found fees, claiming...`);
-              await claimFees(v4Config.positionTokenId);
-            }
-          } catch (e) {
-            console.error(`[${config.name}] Error claiming fees:`, e);
-          }
+    // --- Automation Logic ---
+    if (config.automation.enabled) {
+      const minClaimUSD = config.automation.minFeeToClaimUSD || 0;
+      const pendingUSD = status.feesPendingUSD || 0;
+
+      if (pendingUSD > minClaimUSD) {
+        if (config.automation.autoCompound) {
+          console.log(
+            `[${config.name}] Pending Fees: $${pendingUSD.toFixed(
+              2
+            )} > Threshold $${minClaimUSD}. Compounding...`
+          );
+          await compoundFees(config);
+        } else if (config.automation.autoClaim) {
+          console.log(
+            `[${config.name}] Pending Fees: $${pendingUSD.toFixed(
+              2
+            )} > Threshold $${minClaimUSD}. Claiming...`
+          );
+          await claimFees(config);
         }
       }
     }
@@ -71,9 +75,10 @@ async function checkSinglePosition(config: PositionConfig): Promise<void> {
     }
 
     positionStates.set(config.id, status.isInRange);
+    return status;
   } catch (error) {
     console.error(`❌ Error checking ${config.name}:`, error);
-    // Don't spam error alerts for every failure, maybe track consecutive failures
+    return null;
   }
 }
 
@@ -87,8 +92,16 @@ async function performCheck(): Promise<void> {
     } positions...`
   );
 
+  const statuses: PositionStatus[] = [];
   for (const position of POSITIONS) {
-    await checkSinglePosition(position);
+    const status = await checkSinglePosition(position);
+    if (status) {
+      statuses.push(status);
+    }
+  }
+
+  if (statuses.length > 0) {
+    printDashboard(statuses);
   }
 }
 
