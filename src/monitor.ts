@@ -6,6 +6,7 @@ import {
   sendErrorAlert,
 } from './telegram';
 import { POOL_CONFIG } from './config';
+import { getUnclaimedFees, claimFees, rebalancePosition } from './automation';
 
 // 状态跟踪
 let lastInRangeStatus: boolean | null = null;
@@ -22,6 +23,40 @@ async function performCheck(): Promise<void> {
 
     // 打印当前状态
     console.log(formatPositionStatus(status));
+
+    // --- Automation Logic ---
+    if (POOL_CONFIG.automation.enabled && POOL_CONFIG.positionTokenId) {
+      const tokenId = POOL_CONFIG.positionTokenId;
+
+      // 1. Auto Claim Fees
+      if (POOL_CONFIG.automation.autoClaim) {
+        try {
+          const fees = await getUnclaimedFees(tokenId);
+          console.log(`💰 Unclaimed Fees: ${fees.amount0Formatted} Token0 / ${fees.amount1Formatted} Token1`);
+          
+          // TODO: Check against minFeeToClaimUSD
+          if (fees.amount0 > 0n || fees.amount1 > 0n) {
+            console.log('Fees found, attempting to claim...');
+            await claimFees(tokenId);
+          }
+        } catch (e) {
+          console.error("⚠️ Error checking/claiming fees:", e);
+        }
+      }
+
+      // 2. Auto Rebalance
+      if (POOL_CONFIG.automation.autoRebalance && !status.isInRange) {
+        console.log("🔄 Position out of range. Initiating auto-rebalance...");
+        // Example: Rebalance to +/- 10% of current price
+        // Note: This is a placeholder. Real rebalancing needs precise tick calculation.
+        // const currentTick = status.currentTick;
+        // const newLower = currentTick - 1000;
+        // const newUpper = currentTick + 1000;
+        // await rebalancePosition(tokenId, newLower, newUpper);
+        console.log("⚠️ Auto-rebalance logic triggered (requires implementation of strategy)");
+      }
+    }
+    // ------------------------
 
     // 检测状态变化
     if (lastInRangeStatus !== null && lastInRangeStatus !== status.isInRange) {

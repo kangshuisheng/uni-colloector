@@ -62,6 +62,15 @@ export const POOL_CONFIG = {
   poolKey: config.poolKey,
   position: config.position,
   monitoring: config.monitoring,
+  automation: config.automation || {
+    enabled: false,
+    autoClaim: false,
+    autoCompound: false,
+    autoRebalance: false,
+    minFeeToClaimUSD: 5.0,
+    rebalanceThresholdPercent: 10.0
+  },
+  positionTokenId: config.positionTokenId ? BigInt(config.positionTokenId) : null,
 };
 
 // Price conversion helpers

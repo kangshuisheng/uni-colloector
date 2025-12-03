@@ -166,11 +166,30 @@ A: 可以。如果未配置 TG_BOT_TOKEN，通知会在控制台输出而不发�
 
 - [x] 监控头寸区间状态
 - [x] Telegram 实时通知
-- [ ] 累计手续费监控（达到阈值提醒）
-- [ ] 自动领取手续费并复投
-- [ ] 自动再平衡区间
+- [x] 累计手续费监控（达到阈值提醒）
+- [x] 自动领取手续费并复投 (基础实现)
+- [x] 自动再平衡区间 (基础实现)
 - [ ] 支持多头寸监控
 - [ ] Web 控制面板
+
+## 自动化功能配置
+
+在 `config.json` 中启用自动化功能：
+
+```json
+"automation": {
+  "enabled": true,
+  "autoClaim": true,
+  "autoRebalance": true,
+  "minFeeToClaimUSD": 5.0,
+  "rebalanceThresholdPercent": 10.0
+}
+```
+
+**注意**：自动化功能涉及资金操作，请确保：
+1. `.env` 中的私钥有足够的 gas。
+2. `config.json` 中配置了正确的 `positionTokenId`。
+3. 建议先在测试网或小资金测试。
 
 ## 许可证
 
