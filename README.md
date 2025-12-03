@@ -53,24 +53,66 @@ TG_CHAT_ID=your_chat_id
 
 ### 3. 配置池子参数
 
-编辑 `config.json`：
+编辑 `config.json`，支持同时监控多个 V3/V4 头寸：
 
 ```json
 {
-  "poolId": "0xadaf30776f551bccdfb307c3fd8cdec198ca9a852434c8022ee32d1ccedd8219",
-  "position": {
-    "tickLower": -37340,
-    "tickUpper": 37000,
-    "priceRangeLower": 0.018206128,
-    "priceRangeUpper": 0.039806058
+  "monadContracts": {
+    "poolManager": "0x...",
+    "positionManager": "0x...",
+    "stateView": "0x...",
+    "quoter": "0x..."
   },
   "monitoring": {
     "checkIntervalMinutes": 5,
     "alertOnOutOfRange": true,
     "feeThresholdUSD": 5.0
-  }
+  },
+  "positions": [
+    {
+      "id": "mon-ausd-v4",
+      "name": "MON/AUSD V4",
+      "protocol": "v4",
+      "chainId": 143,
+      "token0Decimals": 18,
+      "token1Decimals": 6,
+      "poolId": "0x...",
+      "positionTokenId": "123",
+      "tickLower": -316386,
+      "tickUpper": -308563,
+      "automation": {
+        "enabled": true,
+        "autoClaim": true,
+        "autoCompound": false,
+        "autoRebalance": false,
+        "minFeeToClaimUSD": 5.0,
+        "rebalanceThresholdPercent": 10.0
+      }
+    },
+    {
+      "id": "wmon-usdc-v3",
+      "name": "WMON/USDC V3",
+      "protocol": "v3",
+      "chainId": 143,
+      "token0Decimals": 18,
+      "token1Decimals": 6,
+      "poolAddress": "0x...",
+      "nftId": "179",
+      "nonfungiblePositionManagerAddress": "0x...",
+      "tickLower": -315200,
+      "tickUpper": -309000,
+      "automation": {
+        "enabled": false
+      }
+    }
+  ]
 }
 ```
+
+### 辅助工具
+
+- **检测 V4 头寸**：`bun run src/detect-position.ts`
+- **检测 V3 头寸**：`bun run src/detect-v3.ts <NFT_MANAGER_ADDRESS> <TOKEN_ID>`
 
 ### 4. 测试连接
 
@@ -93,12 +135,16 @@ uni-collector/
 ├── src/
 │   ├── index.ts          # 主入口
 │   ├── config.ts         # 配置和 Viem 客户端
-│   ├── abis.ts           # 合约 ABI
-│   ├── pool.ts           # 池状态查询
+│   ├── abis.ts           # V4 合约 ABI
+│   ├── abis-v3.ts        # V3 合约 ABI
+│   ├── pool.ts           # 池状态查询 (V3 & V4)
+│   ├── automation.ts     # 自动化操作 (Claim/Rebalance)
 │   ├── telegram.ts       # Telegram 通知
 │   ├── monitor.ts        # 监控逻辑
+│   ├── detect-position.ts # V4 头寸检测工具
+│   ├── detect-v3.ts      # V3 头寸检测工具
 │   └── test.ts           # 测试脚本
-├── config.json           # 池子配置
+├── config.json           # 多头寸配置
 ├── .env                  # 环境变量
 └── package.json
 ```
@@ -169,12 +215,12 @@ A: 可以。如果未配置 TG_BOT_TOKEN，通知会在控制台输出而不发�
 - [x] 累计手续费监控（达到阈值提醒）
 - [x] 自动领取手续费并复投 (基础实现)
 - [x] 自动再平衡区间 (基础实现)
-- [ ] 支持多头寸监控
+- [x] 支持多头寸监控 (V3 & V4)
 - [ ] Web 控制面板
 
 ## 自动化功能配置
 
-在 `config.json` 中启用自动化功能：
+在 `config.json` 的 `positions` 数组中为每个头寸单独配置自动化功能：
 
 ```json
 "automation": {
@@ -187,6 +233,7 @@ A: 可以。如果未配置 TG_BOT_TOKEN，通知会在控制台输出而不发�
 ```
 
 **注意**：自动化功能涉及资金操作，请确保：
+
 1. `.env` 中的私钥有足够的 gas。
 2. `config.json` 中配置了正确的 `positionTokenId`。
 3. 建议先在测试网或小资金测试。
@@ -198,5 +245,5 @@ MIT
 ## 免责声明
 
 本工具仅供学习参考，使用时请自行承担风险。DeFi 操作涉及资金风险，请谨慎使用自动化功能。
-# uni-colloector
+
 # uni-colloector

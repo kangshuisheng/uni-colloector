@@ -64,14 +64,28 @@ try {
       const priceUpper = (Math.pow(1.0001, Number(tickUpper)) * Math.pow(10, 12)).toFixed(8);
       console.log(`  Price Range: ${priceLower} to ${priceUpper}\n`);
 
-      console.log('💡 To use this position, update config.json:');
-      console.log(`   "positionTokenId": ${tokenId},`);
-      console.log(`   "position": {`);
-      console.log(`     "tickLower": ${tickLower},`);
-      console.log(`     "tickUpper": ${tickUpper},`);
-      console.log(`     "priceRangeLower": ${priceLower},`);
-      console.log(`     "priceRangeUpper": ${priceUpper}`);
-      console.log(`   }\n`);
+      console.log('💡 Add this to "positions" in config.json:');
+      console.log(JSON.stringify({
+        id: `pos-${tokenId}`,
+        name: `Position #${tokenId}`,
+        protocol: "v4",
+        chainId: 143,
+        token0Decimals: 6,
+        token1Decimals: 18,
+        poolId: poolId,
+        positionTokenId: tokenId.toString(),
+        tickLower: Number(tickLower),
+        tickUpper: Number(tickUpper),
+        automation: {
+          enabled: false,
+          autoClaim: false,
+          autoCompound: false,
+          autoRebalance: false,
+          minFeeToClaimUSD: 5.0,
+          rebalanceThresholdPercent: 10.0
+        }
+      }, null, 2));
+      console.log('\n');
     } catch (error: any) {
       console.log(`  ⚠️ Could not fetch details: ${error.shortMessage || error.message?.split('\n')[0]}`);
       console.log(`  (Position exists but needs different query method)\n`);

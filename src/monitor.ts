@@ -1,69 +1,55 @@
-import { checkPositionStatus, formatPositionStatus } from './pool';
+import { checkPosition, formatPositionStatus } from "./pool";
 import {
   sendMonitorStartAlert,
   sendOutOfRangeAlert,
   sendBackInRangeAlert,
-  sendErrorAlert,
-} from './telegram';
-import { POOL_CONFIG } from './config';
-import { getUnclaimedFees, claimFees, rebalancePosition } from './automation';
+} from "./telegram";
+import { POSITIONS, MONITORING_CONFIG } from "./config";
+import { getUnclaimedFees, claimFees } from "./automation";
+import type { PositionConfig, V4PositionConfig } from "./types";
 
-// 状态跟踪
-let lastInRangeStatus: boolean | null = null;
+// State tracking per position
+const positionStates = new Map<string, boolean | null>();
 let isRunning = false;
 
 /**
- * 执行单次检查
+ * Check a single position
  */
-async function performCheck(): Promise<void> {
+async function checkSinglePosition(config: PositionConfig): Promise<void> {
   try {
-    console.log(`\n[${new Date().toLocaleString('zh-CN')}] Checking position status...`);
-
-    const status = await checkPositionStatus();
-
-    // 打印当前状态
+    const status = await checkPosition(config);
     console.log(formatPositionStatus(status));
 
-    // --- Automation Logic ---
-    if (POOL_CONFIG.automation.enabled && POOL_CONFIG.positionTokenId) {
-      const tokenId = POOL_CONFIG.positionTokenId;
-
-      // 1. Auto Claim Fees
-      if (POOL_CONFIG.automation.autoClaim) {
-        try {
-          const fees = await getUnclaimedFees(tokenId);
-          console.log(`💰 Unclaimed Fees: ${fees.amount0Formatted} Token0 / ${fees.amount1Formatted} Token1`);
-          
-          // TODO: Check against minFeeToClaimUSD
-          if (fees.amount0 > 0n || fees.amount1 > 0n) {
-            console.log('Fees found, attempting to claim...');
-            await claimFees(tokenId);
+    // --- Automation Logic (V4 Only for now) ---
+    if (config.protocol === "v4" && config.automation.enabled) {
+      const v4Config = config as V4PositionConfig;
+      if (v4Config.positionTokenId) {
+        // Auto Claim
+        if (config.automation.autoClaim) {
+          try {
+            const fees = await getUnclaimedFees(
+              v4Config.positionTokenId,
+              config.token0Decimals,
+              config.token1Decimals
+            );
+            if (fees.amount0 > 0n || fees.amount1 > 0n) {
+              console.log(`[${config.name}] Found fees, claiming...`);
+              await claimFees(v4Config.positionTokenId);
+            }
+          } catch (e) {
+            console.error(`[${config.name}] Error claiming fees:`, e);
           }
-        } catch (e) {
-          console.error("⚠️ Error checking/claiming fees:", e);
         }
-      }
-
-      // 2. Auto Rebalance
-      if (POOL_CONFIG.automation.autoRebalance && !status.isInRange) {
-        console.log("🔄 Position out of range. Initiating auto-rebalance...");
-        // Example: Rebalance to +/- 10% of current price
-        // Note: This is a placeholder. Real rebalancing needs precise tick calculation.
-        // const currentTick = status.currentTick;
-        // const newLower = currentTick - 1000;
-        // const newUpper = currentTick + 1000;
-        // await rebalancePosition(tokenId, newLower, newUpper);
-        console.log("⚠️ Auto-rebalance logic triggered (requires implementation of strategy)");
       }
     }
     // ------------------------
 
-    // 检测状态变化
-    if (lastInRangeStatus !== null && lastInRangeStatus !== status.isInRange) {
-      // 状态发生变化
+    // Alert Logic
+    const lastStatus = positionStates.get(config.id) ?? null;
+
+    if (lastStatus !== null && lastStatus !== status.isInRange) {
       if (!status.isInRange) {
-        // 从区间内变为区间外
-        console.log('⚠️ Position moved OUT of range! Sending alert...');
+        console.log(`⚠️ [${config.name}] moved OUT of range!`);
         await sendOutOfRangeAlert(
           status.currentPrice,
           status.priceLower,
@@ -71,13 +57,11 @@ async function performCheck(): Promise<void> {
           status.deviationPercent
         );
       } else {
-        // 从区间外变为区间内
-        console.log('✅ Position moved BACK into range! Sending alert...');
+        console.log(`✅ [${config.name}] moved BACK into range!`);
         await sendBackInRangeAlert(status.currentPrice);
       }
-    } else if (lastInRangeStatus === null && !status.isInRange) {
-      // 首次检查就发现在区间外
-      console.log('⚠️ Initial check: Position is OUT of range! Sending alert...');
+    } else if (lastStatus === null && !status.isInRange) {
+      console.log(`⚠️ [${config.name}] Initial check: OUT of range!`);
       await sendOutOfRangeAlert(
         status.currentPrice,
         status.priceLower,
@@ -86,48 +70,61 @@ async function performCheck(): Promise<void> {
       );
     }
 
-    // 更新状态
-    lastInRangeStatus = status.isInRange;
+    positionStates.set(config.id, status.isInRange);
   } catch (error) {
-    console.error('❌ Error during check:', error);
-    await sendErrorAlert(error instanceof Error ? error.message : String(error));
+    console.error(`❌ Error checking ${config.name}:`, error);
+    // Don't spam error alerts for every failure, maybe track consecutive failures
   }
 }
 
 /**
- * 启动监控
+ * Perform check for all positions
+ */
+async function performCheck(): Promise<void> {
+  console.log(
+    `\n[${new Date().toLocaleString("zh-CN")}] Checking ${
+      POSITIONS.length
+    } positions...`
+  );
+
+  for (const position of POSITIONS) {
+    await checkSinglePosition(position);
+  }
+}
+
+/**
+ * Start Monitor
  */
 export async function startMonitor(): Promise<void> {
   if (isRunning) {
-    console.log('Monitor is already running');
+    console.log("Monitor is already running");
+    return;
+  }
+
+  if (POSITIONS.length === 0) {
+    console.error("❌ No positions configured!");
     return;
   }
 
   isRunning = true;
-  const checkInterval = POOL_CONFIG.monitoring.checkIntervalMinutes;
+  const checkInterval = MONITORING_CONFIG.checkIntervalMinutes;
 
-  console.log('🚀 Starting LP Position Monitor...');
-  console.log(`Pool ID: ${POOL_CONFIG.poolId}`);
+  console.log("🚀 Starting Multi-Position Monitor...");
+  console.log(`Monitoring ${POSITIONS.length} positions`);
   console.log(`Check Interval: ${checkInterval} minutes`);
-  console.log(`Price Range: ${POOL_CONFIG.position.priceRangeLower} - ${POOL_CONFIG.position.priceRangeUpper}`);
 
-  // 发送启动通知
-  await sendMonitorStartAlert(POOL_CONFIG.poolId, checkInterval);
+  // Send start alert (using first position's ID as reference or generic)
+  await sendMonitorStartAlert(POSITIONS[0].id, checkInterval);
 
-  // 立即执行一次检查
+  // Immediate check
   await performCheck();
 
-  // 设置定时检查
+  // Schedule
   const intervalMs = checkInterval * 60 * 1000;
   setInterval(performCheck, intervalMs);
-
-  console.log(`\n✅ Monitor started. Checking every ${checkInterval} minutes...`);
 }
 
-/**
- * 停止监控
- */
 export function stopMonitor(): void {
   isRunning = false;
-  console.log('Monitor stopped');
+  console.log("Monitor stopped");
 }

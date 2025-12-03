@@ -1,36 +1,44 @@
-import { createPublicClient, createWalletClient, http, type Address } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import { defineChain } from 'viem';
+import {
+  createPublicClient,
+  createWalletClient,
+  http,
+  type Address,
+} from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { defineChain } from "viem";
+import type { PositionConfig } from "./types";
 
 // Load configuration
-const configFile = Bun.file('./config.json');
+const configFile = Bun.file("./config.json");
 const config = await configFile.json();
 
 // Define Monad chain
 export const monad = defineChain({
   id: 143,
-  name: 'Monad',
-  network: 'monad',
+  name: "Monad",
+  network: "monad",
   nativeCurrency: {
     decimals: 18,
-    name: 'MON',
-    symbol: 'MON',
+    name: "MON",
+    symbol: "MON",
   },
   rpcUrls: {
-    default: { http: [process.env.RPC_URL || 'https://rpc.monad.xyz'] },
-    public: { http: [process.env.RPC_URL || 'https://rpc.monad.xyz'] },
+    default: { http: [process.env.RPC_URL || "https://rpc.monad.xyz"] },
+    public: { http: [process.env.RPC_URL || "https://rpc.monad.xyz"] },
   },
 });
 
 // Environment variables
 export const PRIVATE_KEY = process.env.PRIVATE_KEY as `0x${string}`;
-export const RPC_URL = process.env.RPC_URL || 'https://rpc.monad.xyz';
+export const RPC_URL = process.env.RPC_URL || "https://rpc.monad.xyz";
 export const TG_BOT_TOKEN = process.env.TG_BOT_TOKEN;
 export const TG_CHAT_ID = process.env.TG_CHAT_ID;
 
 // Validate required environment variables
 if (!PRIVATE_KEY || !RPC_URL) {
-  throw new Error('Missing required environment variables: PRIVATE_KEY or RPC_URL');
+  throw new Error(
+    "Missing required environment variables: PRIVATE_KEY or RPC_URL"
+  );
 }
 
 // Create account from private key
@@ -57,21 +65,47 @@ export const CONTRACTS = {
 };
 
 // Pool configuration
-export const POOL_CONFIG = {
-  poolId: config.poolId as `0x${string}`,
-  poolKey: config.poolKey,
-  position: config.position,
-  monitoring: config.monitoring,
-  automation: config.automation || {
-    enabled: false,
-    autoClaim: false,
-    autoCompound: false,
-    autoRebalance: false,
-    minFeeToClaimUSD: 5.0,
-    rebalanceThresholdPercent: 10.0
-  },
-  positionTokenId: config.positionTokenId ? BigInt(config.positionTokenId) : null,
-};
+// Support both old single-position config and new multi-position config
+export const POSITIONS: PositionConfig[] = [];
+
+if (config.positions && Array.isArray(config.positions)) {
+  // New format
+  config.positions.forEach((pos: any) => {
+    POSITIONS.push({
+      ...pos,
+      positionTokenId: pos.positionTokenId
+        ? BigInt(pos.positionTokenId)
+        : undefined,
+      nftId: pos.nftId ? BigInt(pos.nftId) : undefined,
+    });
+  });
+} else if (config.poolId) {
+  // Legacy format fallback
+  POSITIONS.push({
+    id: "legacy-1",
+    name: "Legacy Position",
+    protocol: "v4",
+    chainId: 143,
+    token0Decimals: 6, // Defaulting to MON/AUSD assumption
+    token1Decimals: 18,
+    poolId: config.poolId as `0x${string}`,
+    positionTokenId: config.positionTokenId
+      ? BigInt(config.positionTokenId)
+      : 0n,
+    tickLower: config.position.tickLower,
+    tickUpper: config.position.tickUpper,
+    automation: config.automation || {
+      enabled: false,
+      autoClaim: false,
+      autoCompound: false,
+      autoRebalance: false,
+      minFeeToClaimUSD: 5.0,
+      rebalanceThresholdPercent: 10.0,
+    },
+  } as any);
+}
+
+export const MONITORING_CONFIG = config.monitoring;
 
 // Price conversion helpers
 export function tickToPrice(tick: number): number {
@@ -83,6 +117,10 @@ export function priceToTick(price: number): number {
 }
 
 // Check if current tick is within position range
-export function isInRange(currentTick: number, tickLower: number, tickUpper: number): boolean {
+export function isInRange(
+  currentTick: number,
+  tickLower: number,
+  tickUpper: number
+): boolean {
   return currentTick >= tickLower && currentTick <= tickUpper;
 }
