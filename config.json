@@ -30,27 +30,6 @@
         "minFeeToClaimUSD": 5.0,
         "rebalanceThresholdPercent": 10.0
       }
-    },
-    {
-      "id": "v3-179",
-      "name": "WMON/USDC V3",
-      "protocol": "v3",
-      "chainId": 143,
-      "token0Decimals": 18,
-      "token1Decimals": 6,
-      "poolAddress": "0x998B563B214f158FcE042Ca82a8D441343F507d6",
-      "nftId": "179",
-      "nonfungiblePositionManagerAddress": "0xb8058cDbC6CdC4b0aA0Aa00A7Ecf7CAAF1441392",
-      "tickLower": -315200,
-      "tickUpper": -309000,
-      "automation": {
-        "enabled": true,
-        "autoClaim": true,
-        "autoCompound": true,
-        "autoRebalance": true,
-        "minFeeToClaimUSD": 5.0,
-        "rebalanceThresholdPercent": 10.0
-      }
     }
   ]
 }
