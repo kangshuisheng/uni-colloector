@@ -64,6 +64,9 @@
       "nonfungiblePositionManagerAddress": "0xb8058cDbC6CdC4b0aA0Aa00A7Ecf7CAAF1441392",
       "tickLower": 3793,
       "tickUpper": 3799,
+      "analytics": {
+        "token1PriceSourcePoolAddress": "0x998B563B214f158FcE042Ca82a8D441343F507d6"
+      },
       "automation": {
         "enabled": true,
         "autoClaim": true,

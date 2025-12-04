@@ -12,10 +12,52 @@ import { Token } from "@uniswap/sdk-core";
 import { Pool as PoolV4, Position as PositionV4 } from "@uniswap/v4-sdk";
 import { Pool as PoolV3, Position as PositionV3 } from "@uniswap/v3-sdk";
 import JSBI from "jsbi";
+import { parseAbi } from "viem";
 
 // Helper to convert BigInt to JSBI
 function toJSBI(val: bigint): JSBI {
   return JSBI.BigInt(val.toString());
+}
+
+// Helper to fetch token price from a pool
+async function fetchTokenPriceFromPool(poolAddress: `0x${string}`): Promise<number> {
+  try {
+    const POOL_ABI = parseAbi([
+      "function slot0() external view returns (uint160 sqrtPriceX96, int24 tick, uint16 observationIndex, uint16 observationCardinality, uint16 observationCardinalityNext, uint8 feeProtocol, bool unlocked)",
+      "function token0() external view returns (address)",
+      "function token1() external view returns (address)",
+    ]);
+
+    const ERC20_ABI = parseAbi([
+      "function decimals() external view returns (uint8)",
+    ]);
+
+    const [token0, token1, slot0] = await Promise.all([
+      publicClient.readContract({ address: poolAddress, abi: POOL_ABI, functionName: "token0" }),
+      publicClient.readContract({ address: poolAddress, abi: POOL_ABI, functionName: "token1" }),
+      publicClient.readContract({ address: poolAddress, abi: POOL_ABI, functionName: "slot0" }),
+    ]);
+
+    const [d0, d1] = await Promise.all([
+      publicClient.readContract({ address: token0, abi: ERC20_ABI, functionName: "decimals" }),
+      publicClient.readContract({ address: token1, abi: ERC20_ABI, functionName: "decimals" }),
+    ]);
+
+    const tick = Number(slot0[1]);
+    const priceRaw = Math.pow(1.0001, tick);
+    
+    // Calculate price of Token0 in terms of Token1
+    // Price = 1.0001^tick * 10^(dec0 - dec1)
+    const price0in1 = priceRaw * Math.pow(10, d0 - d1);
+    
+    // For WMON/USDC pool: Token0=WMON, Token1=USDC.
+    // price0in1 = Price of WMON in USDC.
+    
+    return price0in1;
+  } catch (e) {
+    console.error("Error fetching token price from pool:", e);
+    return 0;
+  }
 }
 
 /**
@@ -324,7 +366,16 @@ async function buildStatus(
 
   if (liquidity > 0n) {
     // Estimate Value
-    const token1Price = config.analytics?.token1PriceUSD || 1.0;
+    let token1Price = config.analytics?.token1PriceUSD || 1.0;
+    
+    // If dynamic price source is configured, fetch it
+    if (config.analytics?.token1PriceSourcePoolAddress) {
+        const dynamicPrice = await fetchTokenPriceFromPool(config.analytics.token1PriceSourcePoolAddress);
+        if (dynamicPrice > 0) {
+            token1Price = dynamicPrice;
+        }
+    }
+
     const token0Price = currentPrice * token1Price;
 
     currentValueUSD = amount0 * token0Price + amount1 * token1Price;

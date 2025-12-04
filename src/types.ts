@@ -13,6 +13,7 @@ export interface AnalyticsConfig {
   initialValueUSD?: number;
   startTime?: string; // ISO Date string
   token1PriceUSD?: number; // Manual override for price calculation
+  token1PriceSourcePoolAddress?: `0x${string}`; // Pool to fetch Token1 price from (paired with stablecoin)
 }
 
 export interface BasePositionConfig {
