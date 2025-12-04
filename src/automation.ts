@@ -1,7 +1,7 @@
 import { publicClient, walletClient, CONTRACTS, account } from "./config";
-import { POSITION_MANAGER_ABI, STATE_VIEW_ABI } from "./abis";
-import { V3_NFT_MANAGER_ABI } from "./abis-v3";
-import { formatUnits, pad, toHex } from "viem";
+import { POSITION_MANAGER_ABI, STATE_VIEW_ABI, ERC20_ABI } from "./abis";
+import { V3_NFT_MANAGER_ABI, V3_FACTORY_ABI } from "./abis-v3";
+import { formatUnits, pad, toHex, type Address } from "viem";
 import { sendAutoActionAlert } from "./telegram";
 import type {
   PositionConfig,
@@ -146,7 +146,10 @@ async function getUnclaimedFeesV3(config: V3PositionConfig): Promise<Fees> {
 /**
  * Claim fees for a position
  */
-export async function claimFees(config: PositionConfig, silent: boolean = false) {
+export async function claimFees(
+  config: PositionConfig,
+  silent: boolean = false
+) {
   if (config.protocol === "v4") {
     return claimFeesV4(config as V4PositionConfig, silent);
   } else {
@@ -161,7 +164,7 @@ async function claimFeesV4(config: V4PositionConfig, silent: boolean) {
 
   let fees: Fees | null = null;
   if (!silent) {
-      fees = await getUnclaimedFeesV4(config);
+    fees = await getUnclaimedFeesV4(config);
   }
 
   const hash = await walletClient.writeContract({
@@ -184,17 +187,17 @@ async function claimFeesV4(config: V4PositionConfig, silent: boolean) {
   console.log("Fees claimed successfully!");
 
   if (!silent && fees) {
-      await sendAutoActionAlert(
-          "领取",
-          config.name,
-          fees.amount0Formatted,
-          "T0",
-          fees.amount1Formatted,
-          "T1",
-          hash
-      );
+    await sendAutoActionAlert(
+      "领取",
+      config.name,
+      fees.amount0Formatted,
+      "T0",
+      fees.amount1Formatted,
+      "T1",
+      hash
+    );
   }
-  
+
   return hash;
 }
 
@@ -205,7 +208,7 @@ async function claimFeesV3(config: V3PositionConfig, silent: boolean) {
 
   let fees: Fees | null = null;
   if (!silent) {
-      fees = await getUnclaimedFeesV3(config);
+    fees = await getUnclaimedFeesV3(config);
   }
 
   const hash = await walletClient.writeContract({
@@ -228,15 +231,15 @@ async function claimFeesV3(config: V3PositionConfig, silent: boolean) {
   console.log("Fees claimed successfully!");
 
   if (!silent && fees) {
-      await sendAutoActionAlert(
-          "领取",
-          config.name,
-          fees.amount0Formatted,
-          "T0",
-          fees.amount1Formatted,
-          "T1",
-          hash
-      );
+    await sendAutoActionAlert(
+      "领取",
+      config.name,
+      fees.amount0Formatted,
+      "T0",
+      fees.amount1Formatted,
+      "T1",
+      hash
+    );
   }
 
   return hash;
@@ -295,12 +298,64 @@ export async function compoundFees(config: PositionConfig) {
   );
 }
 
+/**
+ * Helper: Ensure token approval
+ */
+async function ensureApproval(
+  token: Address,
+  spender: Address,
+  amount: bigint
+) {
+  const allowance = await publicClient.readContract({
+    address: token,
+    abi: ERC20_ABI,
+    functionName: "allowance",
+    args: [account.address, spender],
+  });
+
+  if (allowance < amount) {
+    console.log(`Approving ${spender} to spend ${amount} of ${token}...`);
+    const hash = await walletClient.writeContract({
+      address: token,
+      abi: ERC20_ABI,
+      functionName: "approve",
+      args: [
+        spender,
+        115792089237316195423570985008687907853269984665640564039457584007913129639935n,
+      ], // Max Uint256
+      account,
+    });
+    console.log(`Approval Tx: ${hash}`);
+    await publicClient.waitForTransactionReceipt({ hash });
+    console.log("Approval confirmed.");
+  }
+}
+
 async function increaseLiquidityV4(
   config: V4PositionConfig,
   amount0: bigint,
   amount1: bigint
 ) {
   if (!config.positionTokenId) return;
+
+  // 0. Get Pool Info to find tokens
+  // For V4, we need to know the currency0 and currency1.
+  // We can get this from PositionManager.getPoolAndPositionInfo(tokenId)
+  const [poolKey] = await publicClient.readContract({
+    address: CONTRACTS.positionManager,
+    abi: POSITION_MANAGER_ABI,
+    functionName: "getPoolAndPositionInfo",
+    args: [config.positionTokenId],
+  });
+
+  const token0 = poolKey.currency0;
+  const token1 = poolKey.currency1;
+
+  // 1. Ensure Approvals
+  if (amount0 > 0n)
+    await ensureApproval(token0, CONTRACTS.positionManager, amount0);
+  if (amount1 > 0n)
+    await ensureApproval(token1, CONTRACTS.positionManager, amount1);
 
   const hash = await walletClient.writeContract({
     address: CONTRACTS.positionManager,
@@ -331,6 +386,30 @@ async function increaseLiquidityV3(
 ) {
   if (!config.nftId) return;
 
+  // 0. Get Tokens from Position
+  const pos = await publicClient.readContract({
+    address: config.nonfungiblePositionManagerAddress,
+    abi: V3_NFT_MANAGER_ABI,
+    functionName: "positions",
+    args: [config.nftId],
+  });
+  const token0 = pos[2];
+  const token1 = pos[3];
+
+  // 1. Ensure Approvals
+  if (amount0 > 0n)
+    await ensureApproval(
+      token0,
+      config.nonfungiblePositionManagerAddress,
+      amount0
+    );
+  if (amount1 > 0n)
+    await ensureApproval(
+      token1,
+      config.nonfungiblePositionManagerAddress,
+      amount1
+    );
+
   const hash = await walletClient.writeContract({
     address: config.nonfungiblePositionManagerAddress,
     abi: V3_NFT_MANAGER_ABI,
@@ -351,6 +430,149 @@ async function increaseLiquidityV3(
   console.log(`Increase Liquidity Tx: ${hash}`);
   await publicClient.waitForTransactionReceipt({ hash });
   return hash;
+}
+
+/**
+ * Remove Liquidity (Exit Position)
+ */
+export async function removeLiquidity(
+  config: PositionConfig,
+  percentage: number = 100
+) {
+  if (config.protocol === "v4") {
+    return removeLiquidityV4(config as V4PositionConfig, percentage);
+  } else {
+    return removeLiquidityV3(config as V3PositionConfig, percentage);
+  }
+}
+
+async function removeLiquidityV4(config: V4PositionConfig, percentage: number) {
+  if (!config.positionTokenId) return;
+  const tokenId = config.positionTokenId;
+  console.log(
+    `Removing ${percentage}% liquidity from V4 position ${tokenId}...`
+  );
+
+  // 1. Get current liquidity
+  const liquidity = await publicClient.readContract({
+    address: CONTRACTS.positionManager,
+    abi: POSITION_MANAGER_ABI,
+    functionName: "getPositionLiquidity",
+    args: [tokenId],
+  });
+
+  if (liquidity === 0n) {
+    console.log("No liquidity to remove.");
+    return;
+  }
+
+  const liquidityToRemove = (liquidity * BigInt(percentage)) / 100n;
+
+  // 2. Decrease Liquidity
+  console.log(`Removing liquidity amount: ${liquidityToRemove}`);
+  const decreaseHash = await walletClient.writeContract({
+    address: CONTRACTS.positionManager,
+    abi: POSITION_MANAGER_ABI,
+    functionName: "decreaseLiquidity",
+    args: [
+      {
+        tokenId,
+        liquidity: liquidityToRemove,
+        amount0Min: 0n,
+        amount1Min: 0n,
+        deadline: BigInt(Math.floor(Date.now() / 1000) + 600),
+      },
+    ],
+    account,
+  });
+  console.log(`Decrease Liquidity Tx: ${decreaseHash}`);
+  await publicClient.waitForTransactionReceipt({ hash: decreaseHash });
+
+  // 3. Collect tokens (Principal + Fees)
+  console.log("Collecting tokens...");
+  const collectHash = await walletClient.writeContract({
+    address: CONTRACTS.positionManager,
+    abi: POSITION_MANAGER_ABI,
+    functionName: "collect",
+    args: [
+      {
+        tokenId,
+        recipient: account.address,
+        amount0Max: 340282366920938463463374607431768211455n,
+        amount1Max: 340282366920938463463374607431768211455n,
+      },
+    ],
+    account,
+  });
+  console.log(`Collect Tx: ${collectHash}`);
+  await publicClient.waitForTransactionReceipt({ hash: collectHash });
+
+  console.log("Remove Liquidity complete!");
+}
+
+async function removeLiquidityV3(config: V3PositionConfig, percentage: number) {
+  if (!config.nftId) return;
+  const tokenId = config.nftId;
+  console.log(
+    `Removing ${percentage}% liquidity from V3 position ${tokenId}...`
+  );
+
+  // 1. Get current liquidity
+  const pos = await publicClient.readContract({
+    address: config.nonfungiblePositionManagerAddress,
+    abi: V3_NFT_MANAGER_ABI,
+    functionName: "positions",
+    args: [tokenId],
+  });
+  const liquidity = pos[7];
+
+  if (liquidity === 0n) {
+    console.log("No liquidity to remove.");
+    return;
+  }
+
+  const liquidityToRemove = (liquidity * BigInt(percentage)) / 100n;
+
+  // 2. Decrease Liquidity
+  console.log(`Removing liquidity amount: ${liquidityToRemove}`);
+  const decreaseHash = await walletClient.writeContract({
+    address: config.nonfungiblePositionManagerAddress,
+    abi: V3_NFT_MANAGER_ABI,
+    functionName: "decreaseLiquidity",
+    args: [
+      {
+        tokenId,
+        liquidity: liquidityToRemove,
+        amount0Min: 0n,
+        amount1Min: 0n,
+        deadline: BigInt(Math.floor(Date.now() / 1000) + 600),
+      },
+    ],
+    account,
+  });
+  console.log(`Decrease Liquidity Tx: ${decreaseHash}`);
+  await publicClient.waitForTransactionReceipt({ hash: decreaseHash });
+
+  // 3. Collect tokens
+  console.log("Collecting tokens...");
+  const collectHash = await walletClient.writeContract({
+    address: config.nonfungiblePositionManagerAddress,
+    abi: V3_NFT_MANAGER_ABI,
+    functionName: "collect",
+    args: [
+      {
+        tokenId,
+        recipient: account.address,
+        amount0Max: 340282366920938463463374607431768211455n,
+        amount1Max: 340282366920938463463374607431768211455n,
+      },
+    ],
+    account,
+  });
+  console.log(`Collect Tx: ${collectHash}`);
+  await publicClient.waitForTransactionReceipt({ hash: collectHash });
+
+  console.log("Remove Liquidity complete!");
 }
 
 /**
