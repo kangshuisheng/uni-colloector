@@ -5,8 +5,9 @@
 ## 功能特性
 
 ✅ **实时监控**：定期检查 LP 头寸是否在价格区间内  
-✅ **Telegram 通知**：头寸出圈/入圈时自动发送告警  
-✅ **支持 Monad**：运行在 Monad 链上的 Uniswap v4  
+✅ **Telegram 通知**：头寸出圈/入圈、自动复利/领取时自动发送详细告警  
+✅ **自动复利**：支持自动领取手续费并添加回流动性 (Auto-Compound)  
+✅ **支持 Monad**：运行在 Monad 链上的 Uniswap v4 及 V3  
 ✅ **高性能**：使用 Bun.js + Viem 实现极速查询
 
 ## 快速开始
@@ -83,7 +84,7 @@ TG_CHAT_ID=your_chat_id
       "automation": {
         "enabled": true,
         "autoClaim": true,
-        "autoCompound": false,
+        "autoCompound": true,
         "autoRebalance": false,
         "minFeeToClaimUSD": 5.0,
         "rebalanceThresholdPercent": 10.0
@@ -102,7 +103,10 @@ TG_CHAT_ID=your_chat_id
       "tickLower": -315200,
       "tickUpper": -309000,
       "automation": {
-        "enabled": false
+        "enabled": true,
+        "autoClaim": true,
+        "autoCompound": true,
+        "minFeeToClaimUSD": 5.0
       }
     }
   ]
@@ -213,7 +217,7 @@ A: 可以。如果未配置 TG_BOT_TOKEN，通知会在控制台输出而不发�
 - [x] 监控头寸区间状态
 - [x] Telegram 实时通知
 - [x] 累计手续费监控（达到阈值提醒）
-- [x] 自动领取手续费并复投 (基础实现)
+- [x] 自动领取手续费并复投 (Auto-Compound)
 - [x] 自动再平衡区间 (基础实现)
 - [x] 支持多头寸监控 (V3 & V4)
 - [ ] Web 控制面板
@@ -226,6 +230,7 @@ A: 可以。如果未配置 TG_BOT_TOKEN，通知会在控制台输出而不发�
 "automation": {
   "enabled": true,
   "autoClaim": true,
+  "autoCompound": true,
   "autoRebalance": true,
   "minFeeToClaimUSD": 5.0,
   "rebalanceThresholdPercent": 10.0
