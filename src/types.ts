@@ -1,4 +1,4 @@
-export type ProtocolVersion = 'v3' | 'v4';
+export type ProtocolVersion = "v3" | "v4";
 
 export interface AutomationConfig {
   enabled: boolean;
@@ -30,14 +30,14 @@ export interface BasePositionConfig {
 }
 
 export interface V4PositionConfig extends BasePositionConfig {
-  protocol: 'v4';
+  protocol: "v4";
   poolId: `0x${string}`;
   positionTokenId: bigint;
   // V4 specific contracts if needed override
 }
 
 export interface V3PositionConfig extends BasePositionConfig {
-  protocol: 'v3';
+  protocol: "v3";
   poolAddress: `0x${string}`; // V3 pools are separate contracts
   nftId: bigint; // NonfungiblePositionManager token ID
   // V3 specific contracts

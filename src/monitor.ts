@@ -1,12 +1,12 @@
-import { checkPosition, formatPositionStatus } from "./pool";
+import { checkPosition } from "./pool";
 import {
   sendMonitorStartAlert,
   sendOutOfRangeAlert,
   sendBackInRangeAlert,
 } from "./telegram";
 import { POSITIONS, MONITORING_CONFIG } from "./config";
-import { getUnclaimedFees, claimFees, compoundFees } from "./automation";
-import type { PositionConfig, V4PositionConfig, PositionStatus } from "./types";
+import { claimFees, compoundFees } from "./automation";
+import type { PositionConfig, PositionStatus } from "./types";
 import { printDashboard } from "./ui";
 
 // State tracking per position

@@ -1,6 +1,6 @@
 import { publicClient, walletClient, CONTRACTS, account } from "./config";
 import { POSITION_MANAGER_ABI, STATE_VIEW_ABI, ERC20_ABI } from "./abis";
-import { V3_NFT_MANAGER_ABI, V3_FACTORY_ABI } from "./abis-v3";
+import { V3_NFT_MANAGER_ABI } from "./abis-v3";
 import { formatUnits, pad, toHex, type Address } from "viem";
 import { sendAutoActionAlert } from "./telegram";
 import type {
